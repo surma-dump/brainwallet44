@@ -77,13 +77,13 @@ class BIP44Wallet {
     return usedAddresses.filter(t => t.final_balance > 0).map(t => ({address: t.address, balance: t.final_balance}));
   }
 
-  async firstUnusedAddress({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+  async firstUnusedIndex({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
     while (true) {
       const addresses = new Array(GAP_DETECT).fill(0)
-        .map((_, i) => wallet.keyPair({purpose, coinType, account, change: 0, index: i + offset}).getAddress())
+        .map((_, i) => wallet.keyPair({purpose, coinType, account, change: 0, index: i + offset}).getAddress());
       const transactions = await blockchainQuery(addresses);
-      const unusedAddress = transactions.addresses.find(addr => addr.n_tx === 0);
-      if (unusedAddress) return unusedAddress.address;
+      const unusedIndex = addresses.findIndex(addr => transactions.addresses.find(t => t.address === addr).n_tx === 0);
+      if (unusedIndex !== -1) return offset+unusedIndex;
       offset += GAP_DETECT;
     }
   }
@@ -95,5 +95,7 @@ const node = btc.HDNode.fromSeedHex(seed);
 const wallet = new BIP44Wallet(node);
 
 wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-wallet.firstUnusedAddress({account: 0}).then(address => console.log(`First unused address: ${address}`));
-wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
+wallet.firstUnusedIndex({account: 0}).then(index => {
+  console.log(`First unused transaction index: ${index} (address: ${wallet.keyPair({account: 0, change: 0, index}).getAddress()})`);
+});
+// wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
