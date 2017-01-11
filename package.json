@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "bitcoinjs-lib": "^2.3.0",
+    "node-fetch": "^1.6.3"
+  },
+  "name": "brainwallet44",
+  "version": "0.0.1",
+  "author": "Surma <surma@surma.link>",
+  "license": "Apache-2.0",
+}
