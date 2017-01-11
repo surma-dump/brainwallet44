@@ -31,8 +31,8 @@ class BIP44Wallet {
       .derive(index);
   }
 
-  async balance({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account')}) {
-    const usedAddresses = await this._usedAddresses({purpose, coinType, account});
+  async balance({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
     return usedAddresses
       .map(addr => addr.final_balance)
       .reduce((sum, addr) => sum + addr, 0);
@@ -41,20 +41,25 @@ class BIP44Wallet {
   *addresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), change = 0, offset = 0}) {
     let index = offset;
     while(true) {
-      yield this.keyPair({purpose, coinType, account, change, index: index++}).getAddress()
+      yield {
+        address: this.keyPair({purpose, coinType, account, change, index}).getAddress(),
+        path: {purpose, coinType, account, change, index}
+      };
+      index++;
     }
   }
 
-  async _usedAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account')}) {
+  async _usedAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
     const accumulatedUsedAddresses = [];
     let unusedCount = 0;
-    let publicAddressGen = this.addresses({purpose, coinType, account, change: 0});
-    let changeAddressGen = this.addresses({purpose, coinType, account, change: 1});
+    let publicAddressGen = this.addresses({purpose, coinType, account, change: 0, offset});
+    let changeAddressGen = this.addresses({purpose, coinType, account, change: 1, offset});
 
     while (true) {
       const publicAddresses = takeN(publicAddressGen, GAP_DETECT);
       const changeAddresses = takeN(changeAddressGen, GAP_DETECT);
-      const transactions = await blockchainQuery([...publicAddresses, ...changeAddresses]);
+      const allAddresses = [...publicAddresses, ...changeAddresses];
+      const transactions = await blockchainQuery(allAddresses.map(a => a.address));
 
       const usedAddresses = transactions.addresses.filter(t => t.n_tx > 0);
       // If non of the addresses are used, we are done.
@@ -63,17 +68,22 @@ class BIP44Wallet {
       Array.prototype.push.apply(
         accumulatedUsedAddresses,
         usedAddresses
+          .map(t => Object.assign(
+            t, 
+            allAddresses.find(a => t.address === a.address))
+          )
+          .sort((a, b) => a.path.index - b.path.index)
       );
     }
   }
 
-  async usedAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account')}) {
-    const usedAddresses = await this._usedAddresses({purpose, coinType, account});
+  async usedAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
     return usedAddresses.map(t => t.address);
   }
 
-  async nonEmptyAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account')}) {
-    const usedAddresses = await this._usedAddresses({purpose, coinType, account});
+  async nonEmptyAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
     return usedAddresses.filter(t => t.final_balance > 0).map(t => ({address: t.address, balance: t.final_balance}));
   }
 
@@ -87,6 +97,17 @@ class BIP44Wallet {
       offset += GAP_DETECT;
     }
   }
+
+  async gatherValue(value, {purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
+    return usedAddresses
+      .sort((a, b) => a.final_balance - b.final_balance)
+      .filter(t => {
+        if (value <= 0) return false;
+        value -= t.final_balance;
+        return true;
+      });
+  }
 }
 
 const seed = btc.crypto.sha256(process.argv[2]).toString('hex');
@@ -94,8 +115,11 @@ const seed = btc.crypto.sha256(process.argv[2]).toString('hex');
 const node = btc.HDNode.fromSeedHex(seed);
 const wallet = new BIP44Wallet(node);
 
-wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-wallet.firstUnusedIndex({account: 0}).then(index => {
-  console.log(`First unused transaction index: ${index} (address: ${wallet.keyPair({account: 0, change: 0, index}).getAddress()})`);
-});
+// wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
+// wallet.firstUnusedIndex({account: 0}).then(index => {
+//   console.log(`First unused transaction index: ${index} (address: ${wallet.keyPair({account: 0, change: 0, index}).getAddress()})`);
+// });
+wallet.gatherValue(204801, {account: 0}).then(keypairs => console.log(keypairs));
 // wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
+
+// wallet._usedAddresses({account: 0}).then(addr => console.log(addr));
