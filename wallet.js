@@ -21,6 +21,13 @@ function blockchainQuery(addresses = nonOptional('addresses')) {
     .then(resp => resp.json());
 }
 
+async function publishTx(tx) {
+  const resp = await fetch(`https://blockchain.info/pushtx?tx=${tx}`, {method: 'POST'});
+  const body = await resp.text();
+  if (!resp.ok) return Promise.reject(body);
+  return body;
+}
+
 class BIP44Wallet {
   constructor(node) {
     this._node = node;
@@ -87,9 +94,10 @@ class BIP44Wallet {
   }
 
   async usedAddresses({purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    const usedAddresses1 = await this._usedAddresses({purpose, coinType, account, change: 0, offset});
-    const usedAddresses2 = await this._usedAddresses({purpose, coinType, account, change: 1, offset});
-    return [...usedAddresses1, ...usedAddresses2]
+    return [
+      ...await this._usedAddresses({purpose, coinType, account, change: 0, offset}), 
+      ...await this._usedAddresses({purpose, coinType, account, change: 1, offset})
+    ]
       .sort((a, b) => a.path.index - b.path.index)
   }
 
@@ -110,12 +118,16 @@ class BIP44Wallet {
   }
 
   async assembleValue(value, {purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
+    const usedAddresses = [
+      ...await this._usedAddresses({purpose, coinType, account, change: 0, offset}),
+      ...await this._usedAddresses({purpose, coinType, account, change: 1, offset})
+    ];
     return usedAddresses
       // get smallest amounts first so we can consolidate
       .sort((a, b) => a.balance - b.balance)
       .filter(t => {
         if (value <= 0) return false;
+        if (t.balance <= 0) return false;
         value -= t.balance;
         return true;
       })
@@ -125,7 +137,7 @@ class BIP44Wallet {
       });
   }
 
-  async sendValue(target, value, fee, {purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
+  async buildTx(target, value, fee, {purpose = 44, coinType = coinIDs['Bitcoin'], account = nonOptional('account'), offset = 0}) {
     const sources = await this.assembleValue(value + fee, {purpose, coinType, account, offset});
     const change = sources[sources.length - 1].balance - sources[sources.length - 1].withdraw;
     const changeKey = this.keyPair({
@@ -143,7 +155,7 @@ class BIP44Wallet {
     sources.forEach((src, i) =>
       tx.sign(i, this.keyPair(src.path))
     );
-    return tx.build();
+    return tx.build().toHex();
   }
 }
 
@@ -153,13 +165,15 @@ const node = btc.HDNode.fromSeedHex(seed);
 const wallet = new BIP44Wallet(node);
 
 wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-// wallet.firstUnusedIndex({account: 0}).then(index => {
-//   console.log(`First unused transaction index: ${index} (address: ${wallet.keyPair({account: 0, change: 0, index}).getAddress()})`);
-// });
+wallet.firstUnusedIndex({account: 0}).then(index => {
+  console.log(`First unused transaction index: ${index} (address: ${wallet.keyPair({account: 0, change: 0, index}).getAddress()})`);
+});
 // wallet.assembleValue(204801, {account: 0}).then(keypairs => console.log(keypairs));
 
 // wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
 
 // wallet._usedAddresses({account: 0}).then(addr => console.log(addr));
-// wallet.sendValue('3FeF2YermL5BR8nEqHHNHghvYzxDCvY2qr', 204800, 20000, {account: 0}).then(x => console.log(x.toHex()))
-  // .catch(err => console.log(err.toString(), err.stack));
+// wallet.buildTx('1DGipGVkHDhWnBeUmUVjfQunbUZNCY6JbR', 404800, 20000, {account: 0})
+//   .then(tx => publishTx(tx))
+//   .then(r => console.log(r))
+//   .catch(err => console.log(err.toString(), err.stack));
