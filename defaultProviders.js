@@ -85,7 +85,16 @@ module.exports = {
       };
     },
     async publishTx(tx) {
-      const resp = await fetch(`https://testnet.blockexplorer.com/api/tx/send?rawtx=${tx}`, {method: 'POST'});
+      const resp = await fetch(
+        'https://testnet.blockexplorer.com/api/tx/send', 
+        {
+          method: 'post',
+          body: `rawtx=${tx}`,
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
       const body = await resp.text();
       if (!resp.ok) return Promise.reject(body);
       return body;

@@ -136,7 +136,7 @@ class BIP44Wallet {
       index: await this.firstUnusedIndex({purpose, coinType, account, change: 1})
     });
 
-    const tx = new btc.TransactionBuilder();
+    const tx = new btc.TransactionBuilder(coinType);
     sources.forEach((src, i) => {
       tx.addInput(src.transaction.hash, src.transaction.out.find(o => o.addr === src.address).n)
     });
@@ -154,14 +154,18 @@ const seed = btc.crypto.sha256(process.argv[2]).toString('hex');
 const node = btc.HDNode.fromSeedHex(seed);
 const wallet = new BIP44Wallet(node);
 
-console.log(wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 0}).getAddress());
 // wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
 wallet.balance({coinType: defaultProviders['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
 // wallet.balance({coinType: coinIDs['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-// wallet.firstUnusedIndex({coinType: coinIDs['Testnet'], account: 0}).then(index => {
-//   console.log(`First unused transaction address: ${wallet.keyPair({coinType: coinIDs['Testnet'], account: 0, change: 0, index}).getAddress()} (index: ${index})`);
+// wallet.firstUnusedIndex({coinType: defaultProviders['Testnet'], account: 0}).then(index => {
+//   console.log(`First unused transaction address: ${wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index}).getAddress()} (index: ${index})`);
 // });
-// wallet.assembleValue(204801, {account: 0}).then(keypairs => console.log(keypairs));
+// console.log(wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 10}).getAddress())
+// wallet.buildTx('mkR8mSHA3MjDV6GVWi3qhRd62VXeUdS9pf', 204805, 3000, {coinType: defaultProviders['Testnet'], account: 0})
+//   .then(tx => {console.log(tx); return tx})
+//   .then(tx => defaultProviders['Testnet'].publishTx(tx))
+//   .then(x => console.log(x))
+//   .catch(x => console.log(x));
 
 // wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
 
