@@ -11,7 +11,7 @@ function takeN(gen, n) {
   return new Array(n).fill(0).map(_ => gen.next().value);
 }
 
-class BIP44Wallet {
+module.exports = class BIP44Wallet {
   constructor(node, providers = {}) {
     this._node = node;
     this._providers = Object.assign({}, defaultProviders, providers);
@@ -148,36 +148,3 @@ class BIP44Wallet {
     return tx.build().toHex();
   }
 }
-
-const seed = btc.crypto.sha256(process.argv[2]).toString('hex');
-
-const node = btc.HDNode.fromSeedHex(seed);
-const wallet = new BIP44Wallet(node);
-
-// wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-wallet.balance({coinType: defaultProviders['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-// wallet.balance({coinType: coinIDs['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
-// wallet.firstUnusedIndex({coinType: defaultProviders['Testnet'], account: 0}).then(index => {
-//   console.log(`First unused transaction address: ${wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index}).getAddress()} (index: ${index})`);
-// });
-// console.log(wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 10}).getAddress())
-// wallet.buildTx('mkR8mSHA3MjDV6GVWi3qhRd62VXeUdS9pf', 204805, 3000, {coinType: defaultProviders['Testnet'], account: 0})
-//   .then(tx => {console.log(tx); return tx})
-//   .then(tx => defaultProviders['Testnet'].publishTx(tx))
-//   .then(x => console.log(x))
-//   .catch(x => console.log(x));
-
-// wallet.nonEmptyAddresses({account: 0}).then(addresses => console.log(`non-empty addresses: ${JSON.stringify(addresses)}`))
-
-// wallet._usedAddresses({account: 0}).then(addr => console.log(addr));
-// wallet.buildTx('1DGipGVkHDhWnBeUmUVjfQunbUZNCY6JbR', 404800, 20000, {account: 0})
-//   .then(tx => publishTx(tx))
-//   .then(r => console.log(r))
-//   .catch(err => console.log(err.toString(), err.stack));
-
-// const keyPair = wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 0});
-// console.log(keyPair.getAddress());
-// queryAddresses([keyPair.getAddress()]).then(data => {
-//   // btc.script.isPubKeyHashOutput(data.txs[0].out[0])
-//   console.log(JSON.stringify(data))
-// }).catch(err => console.log(err.stack))
