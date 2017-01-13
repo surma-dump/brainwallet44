@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const btc = require('bitcoinjs-lib');
 
 function pick(keys, obj) {
   return keys.reduce((a, k) => Object.assign(a, {[k]: obj[k]}), {});
@@ -17,6 +18,17 @@ module.exports = {
     wif: 0x80,
     dustThreshold: 546, // https://github.com/bitcoin/bitcoin/blob/v0.9.2/src/core.h#L151-L162
 
+    // returns:
+    // {
+    //   "addresses": [
+    //     {"address": "...", "n_tx": 1, "final_balance": 1000000000},
+    //     ...
+    //   ],
+    //   "txs": [
+    //     {"hash": "abc...", "out": [{"addr": "...", "n": 0}, ...]}
+    //     ...
+    //   ]
+    // }
     async queryAddresses(addresses) {
       const resp = await fetch(`https://blockchain.info/multiaddr?active=${addresses.join('|')}&cors=true`, {mode: 'cors'})
       const data = await resp.json();
@@ -33,7 +45,6 @@ module.exports = {
       if (!resp.ok) return Promise.reject(body);
       return body;
     }
-
   },
   'Testnet': {
     messagePrefix: '\x18Bitcoin Signed Message:\n',
@@ -45,7 +56,40 @@ module.exports = {
     pubKeyHash: 0x6f,
     scriptHash: 0xc4,
     wif: 0xef,
-    dustThreshold: 546
+    dustThreshold: 546,
+
+    async queryAddresses(addresses) {
+      const addrResp = await Promise.all(
+        addresses.map(addr => fetch(`https://testnet.blockexplorer.com/api/addr/${addr}`, {mode: 'cors'}))
+      );
+      const txResp = await fetch(`https://testnet.blockexplorer.com/api/addrs/${addresses.join(',')}/txs`, {mode: 'cors'});
+      const addrBodies = await Promise.all(addrResp.map(r => r.json()));
+      const txBody = await txResp.json();
+      return {
+        addresses: addrBodies.map(body => ({
+          address: body.addrStr,
+          final_balance: body.balanceSat + body.unconfirmedBalanceSat,
+          n_tx: body.transactions.length
+        })),
+        txs: txBody.items.map(tx => ({
+          hash: tx.txid,
+          out: tx.vout.map(vout => {
+            const out = {
+              n: vout.n
+            };
+            const scriptPubKey = btc.script.fromASM(vout.scriptPubKey.asm);
+            out.addr = btc.address.fromOutputScript(scriptPubKey, this);
+            return out;
+          })
+        }))
+      };
+    },
+    async publishTx(tx) {
+      const resp = await fetch(`https://testnet.blockexplorer.com/api/tx/send?rawtx=${tx}`, {method: 'POST'});
+      const body = await resp.text();
+      if (!resp.ok) return Promise.reject(body);
+      return body;
+    }
   },
   litecoin: {
     messagePrefix: '\x19Litecoin Signed Message:\n',

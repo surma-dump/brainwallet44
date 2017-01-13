@@ -154,8 +154,9 @@ const seed = btc.crypto.sha256(process.argv[2]).toString('hex');
 const node = btc.HDNode.fromSeedHex(seed);
 const wallet = new BIP44Wallet(node);
 
-// console.log(wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 0}).getAddress());
-wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
+console.log(wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 0}).getAddress());
+// wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
+wallet.balance({coinType: defaultProviders['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
 // wallet.balance({coinType: coinIDs['Testnet'], account: 0}).then(balance => console.log(`Total balance: ${balance} satoshi`));
 // wallet.firstUnusedIndex({coinType: coinIDs['Testnet'], account: 0}).then(index => {
 //   console.log(`First unused transaction address: ${wallet.keyPair({coinType: coinIDs['Testnet'], account: 0, change: 0, index}).getAddress()} (index: ${index})`);
@@ -169,3 +170,10 @@ wallet.balance({account: 0}).then(balance => console.log(`Total balance: ${balan
 //   .then(tx => publishTx(tx))
 //   .then(r => console.log(r))
 //   .catch(err => console.log(err.toString(), err.stack));
+
+// const keyPair = wallet.keyPair({coinType: defaultProviders['Testnet'], account: 0, change: 0, index: 0});
+// console.log(keyPair.getAddress());
+// queryAddresses([keyPair.getAddress()]).then(data => {
+//   // btc.script.isPubKeyHashOutput(data.txs[0].out[0])
+//   console.log(JSON.stringify(data))
+// }).catch(err => console.log(err.stack))
