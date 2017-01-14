@@ -99,7 +99,7 @@ module.exports = class BIP44Wallet {
   async firstUnusedIndex({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), change = 0, offset = 0}) {
     while (true) {
       const addresses = new Array(GAP_DETECT).fill(0)
-        .map((_, i) => wallet.keyPair({purpose, coinType, account, change, index: i + offset}).getAddress());
+        .map((_, i) => this.keyPair({purpose, coinType, account, change, index: i + offset}).getAddress());
       const transactions = await coinType.queryAddresses(addresses);
       const unusedIndex = addresses.findIndex(addr => transactions.addresses.find(t => t.address === addr).n_tx === 0);
       if (unusedIndex !== -1) return offset + unusedIndex;

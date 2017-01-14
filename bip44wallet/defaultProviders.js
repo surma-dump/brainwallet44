@@ -42,7 +42,7 @@ module.exports = {
     async publishTx(tx) {
       const resp = await fetch(`https://blockchain.info/pushtx?tx=${tx}`, {method: 'POST'});
       const body = await resp.text();
-      if (!resp.ok) return Promise.reject(body);
+      if (!resp.ok) throw new Error(body);
       return body;
     }
   },
@@ -96,7 +96,7 @@ module.exports = {
         }
       );
       const body = await resp.text();
-      if (!resp.ok) return Promise.reject(body);
+      if (!resp.ok) throw new Error(body);
       return body;
     }
   },
