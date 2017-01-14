@@ -12,7 +12,7 @@ module.exports = {
       return new Buffer(program.passphrase);
     if (program.queryPassphrase) 
       return new Promise(resolve => {
-        const rl = readline.createInterface({input: process.stdin});
+        const rl = readline.createInterface({input: process.stdin, output: process.stdout});
         rl.question('Passphrase: ', line => {
           rl.close();
           resolve(new Buffer (line));

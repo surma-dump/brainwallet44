@@ -12,6 +12,8 @@ function takeN(gen, n) {
 }
 
 module.exports = class BIP44Wallet {
+  static get defaultProviders() {return defaultProviders;}
+
   constructor(node, providers = {}) {
     this._node = node;
     this._providers = Object.assign({}, defaultProviders, providers);
