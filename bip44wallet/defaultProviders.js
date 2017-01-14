@@ -75,7 +75,9 @@ module.exports = {
           hash: tx.txid,
           out: tx.vout.map(vout => {
             const out = {
-              n: vout.n
+              n: vout.n,
+              value: Math.floor(parseFloat(vout.value)*100000000),
+              spent: !!vout.spentTxId
             };
             const scriptPubKey = btc.script.fromASM(vout.scriptPubKey.asm);
             out.addr = btc.address.fromOutputScript(scriptPubKey, this);

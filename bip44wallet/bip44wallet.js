@@ -31,18 +31,14 @@ module.exports = class BIP44Wallet {
     );
   }
 
-  provider(coinType) {
-    if (coinType in this._provider) return this._provider[coinType];
-    throw new Error(`No provider for ${this._providers.nameByBit44(coinType.bit44)}`);
-  }
-
   async balance({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    const usedAddresses = [
-      ...await this._usedAddresses({purpose, coinType, account, change: 0, offset}),
-      ...await this._usedAddresses({purpose, coinType, account, change: 1, offset}),
+    const transactions = [
+      ...await this.transactions({purpose, coinType, account, change: 0, offset}),
+      ...await this.transactions({purpose, coinType, account, change: 1, offset}),
     ];
-    return usedAddresses
-      .map(addr => addr.balance)
+    return transactions
+      .map(t => t.out.find(o => !!o.path && !o.spent))
+      .map(t => !!t ? t.value : 0)
       .reduce((sum, addr) => sum + addr, 0);
   }
 
@@ -57,45 +53,37 @@ module.exports = class BIP44Wallet {
     }
   }
 
-  async _usedAddresses({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), change = 0, offset = 0}) {
-    const accumulatedUsedAddresses = [];
+  async transactions({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), change = 0, offset = 0}) {
+    const allTransactions = [];
     let unusedCount = 0;
     let addressGen = this.addresses({purpose, coinType, account, change, offset});
 
     while (true) {
       const addresses = takeN(addressGen, GAP_DETECT);
-      const transactions = await coinType.queryAddresses(addresses.map(a => a.address));
+      const rawAddresses = addresses.map(a => a.address);
+      const transactions = await coinType.queryAddresses(rawAddresses);
 
-      const usedAddresses = transactions.addresses.filter(t => t.n_tx > 0);
+      const unspentTransactions = 
+        transactions.txs.filter(tx => 
+          tx.out.some(out => rawAddresses.includes(out.addr) && !out.spent));
+      
       // If non of the addresses are used, we are done.
-      if (usedAddresses.length === 0) return accumulatedUsedAddresses;
-
+      if (transactions.txs.length === 0) return allTransactions;
 
       Array.prototype.push.apply(
-        accumulatedUsedAddresses,
-        usedAddresses
-          .map(ua => Object.assign(
-            // address and path
-            addresses.find(a => a.address === ua.address),
-            {balance: ua.final_balance},
-            {transaction: transactions.txs.find(t => t.out.some(o => o.addr === ua.address))}
-          ))
-          .sort((a, b) => a.path.index - b.path.index)
+        allTransactions,
+        unspentTransactions
+          .map(tx => {
+            tx.out = tx.out.map(out =>
+              Object.assign(
+                out,
+                addresses.find(a => a.address === out.addr)
+              )
+            );
+            return tx;
+          })
       );
     }
-  }
-
-  async usedAddresses({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    return [
-      ...await this._usedAddresses({purpose, coinType, account, change: 0, offset}), 
-      ...await this._usedAddresses({purpose, coinType, account, change: 1, offset})
-    ]
-      .sort((a, b) => a.path.index - b.path.index)
-  }
-
-  async nonEmptyAddresses({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    const usedAddresses = await this._usedAddresses({purpose, coinType, account, offset});
-    return usedAddresses.filter(t => t.balance > 0)
   }
 
   async firstUnusedIndex({purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), change = 0, offset = 0}) {
@@ -110,28 +98,28 @@ module.exports = class BIP44Wallet {
   }
 
   async assembleValue(value, {purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
-    const usedAddresses = [
-      ...await this._usedAddresses({purpose, coinType, account, change: 0, offset}),
-      ...await this._usedAddresses({purpose, coinType, account, change: 1, offset})
+    const transactions = [
+      ...await this.transactions({purpose, coinType, account, change: 0, offset}),
+      ...await this.transactions({purpose, coinType, account, change: 1, offset})
     ];
-    return usedAddresses
+    const usedTransactions = transactions
+      .filter (t => t.out.some(out => !!out.path && !out.spent))
+      .map(t => Object.assign(t.out.find(out => !!out.path), {txid: t.hash}))
       // get smallest amounts first so we can consolidate
-      .sort((a, b) => a.balance - b.balance)
+      .sort((a, b) => a.value - b.value)
       .filter(t => {
         if (value <= 0) return false;
-        if (t.balance <= 0) return false;
-        value -= t.balance;
+        value -= t.value;
         return true;
-      })
-      .map((a, i, arr) => {
-        if (i === arr.length - 1) return Object.assign(a, {withdraw: a.balance + value});
-        return Object.assign(a, {withdraw: a.balance});
       });
+    return {
+      transactions: usedTransactions,
+      change: -value,
+    };
   }
 
   async buildTx(target, value, fee, {purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
     const sources = await this.assembleValue(value + fee, {purpose, coinType, account, offset});
-    const change = sources[sources.length - 1].balance - sources[sources.length - 1].withdraw;
     const changeKey = this.keyPair({
       purpose, coinType, account, 
       change: 1, 
@@ -139,12 +127,12 @@ module.exports = class BIP44Wallet {
     });
 
     const tx = new btc.TransactionBuilder(coinType);
-    sources.forEach((src, i) => {
-      tx.addInput(src.transaction.hash, src.transaction.out.find(o => o.addr === src.address).n)
+    sources.transactions.forEach(src => {
+      tx.addInput(src.txid, src.n)
     });
     tx.addOutput(target, value);
-    if (change > 0) tx.addOutput(changeKey.getAddress(), change);
-    sources.forEach((src, i) =>
+    if (sources.change > 0) tx.addOutput(changeKey.getAddress(), sources.change);
+    sources.transactions.forEach((src, i) =>
       tx.sign(i, this.keyPair(src.path))
     );
     return tx.build().toHex();
