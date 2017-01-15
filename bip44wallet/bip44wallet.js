@@ -120,18 +120,20 @@ module.exports = class BIP44Wallet {
 
   async buildTx(target, value, fee, {purpose = 44, coinType = defaultProviders['Bitcoin'], account = nonOptional('account'), offset = 0}) {
     const sources = await this.assembleValue(value + fee, {purpose, coinType, account, offset});
-    const changeKey = this.keyPair({
-      purpose, coinType, account, 
-      change: 1, 
-      index: await this.firstUnusedIndex({purpose, coinType, account, change: 1})
-    });
 
     const tx = new btc.TransactionBuilder(coinType);
     sources.transactions.forEach(src => {
       tx.addInput(src.txid, src.n)
     });
     tx.addOutput(target, value);
-    if (sources.change > 0) tx.addOutput(changeKey.getAddress(), sources.change);
+    if (sources.change > 0) {
+      const changeKey = this.keyPair({
+        purpose, coinType, account, 
+        change: 1, 
+        index: await this.firstUnusedIndex({purpose, coinType, account, change: 1})
+      });
+      tx.addOutput(changeKey.getAddress(), sources.change);
+    }
     sources.transactions.forEach((src, i) =>
       tx.sign(i, this.keyPair(src.path))
     );

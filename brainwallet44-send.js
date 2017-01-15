@@ -22,10 +22,9 @@ helper.addGlobalOptions(program)
   if (Number.isNaN(program.fee) || program.fee <= 0) 
     throw new Error('Invalid fee')
 
-  const index = await wallet.firstUnusedIndex({coinType: program.coinType, account: program.account});
   const tx = await wallet.buildTx(
     program.address, program.satoshis, program.fee, 
-    {coinType: program.coinType, account: program.account, change: 0, index}
+    {coinType: program.coinType, account: program.account}
   );
   const resp = await program.coinType.publishTx(tx);
   console.log('Done');
